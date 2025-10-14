@@ -1,0 +1,34 @@
+
+----------------------------------
+---- TP no2 ----------------------
+----------------------------------
+
+Creer un repertoire TP2 et copier ces progs dans ce repertoire
+
+
+2 nouvelles fonctions sont a votre disposition:
+
+/*****************************************************/
+/* calcul d'une gaussienne 2D                        */
+/*****************************************************/
+float funcgauss2D(float x,float y,float var);
+
+/*****************************************************/
+/* calcul de l'histogramme                           */
+/*****************************************************/
+void compute_histo(float** mat,int lgth,int wdth,float* hist);
+
+ Bon TP, 
+
+
+
+
+
+
+
+
+
+
+
+
+ 

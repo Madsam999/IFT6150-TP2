@@ -1,0 +1,4 @@
+*.o
+TpIFT6150-2
+*.pgm
+.vscode
