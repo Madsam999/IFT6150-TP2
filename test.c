@@ -29,10 +29,10 @@
 /* PROGRAMME PRINCIPAL   -------------------------*/                     
 /*------------------------------------------------*/
 
-void applyGaussianFilter(float** matReal, float var, int width, int height) {
+void applyGaussianFilter(float** matReal, float sigma, int width, int height) {
     for(int y = 0; y < height; y++) {
         for(int x = 0; x < width; x++) {
-            matReal[y][x] = funcgauss2D(x, y, var);
+            matReal[y][x] = funcgauss2D(x, y, sigma);
         }
     }
 }
@@ -50,7 +50,6 @@ int main(int argc, int** argv) {
     float tau_L, tau_H;
     float p_H;
     float sigma; //skibidi
-    float var;
 
     printf("Entrez la valeur de tau_L: ");
     scanf("%f", &tau_L);
@@ -60,8 +59,6 @@ int main(int argc, int** argv) {
     scanf("%f", &sigma);
     printf("Entrez la valeure de p_H: ");
     scanf("%f", &p_H);
-
-    var = SQUARE(sigma);
 
     float** matReal;
     float** matImaginary;
@@ -79,7 +76,6 @@ int main(int argc, int** argv) {
     }
 
     center(matReal, width, height);
-    applyGaussianFilter(matReal, var, width, height);
 
     FFTDD(matReal, matImaginary, height, width);
     Mod(matModule, matReal, matImaginary, height, width);
