@@ -137,26 +137,26 @@ int main(int argc, char** argv){
     for (i = 0; i < length; ++i) {
         for (j = 0; j < width; ++j) {
             float g = grad[i][j];
-            float qn = 0.0f, rn = 0.0f;     /* voisins à comparer selon la direction */
-            float dir = thetaQ[i][j];       /* 0, 45, 90, 135 */
+            float qn = 0.0f, rn = 0.0f; /* voisins à comparer selon la direction */
+            float dir = thetaQ[i][j]; /* 0, 45, 90, 135 */
 
             if (dir == 0.0f) {
-                float g1 = (j-1 >= 0)        ? grad[i][j-1]   : 0.0f;
-                float g2 = (j+1 <  width)    ? grad[i][j+1]   : 0.0f;
+                float g1 = (j-1 >= 0) ? grad[i][j-1] : 0.0f;
+                float g2 = (j+1 <  width) ? grad[i][j+1] : 0.0f;
                 qn = g1; rn = g2;
 
             } else if (dir == 90.0f) {
-                float g1 = (i-1 >= 0)        ? grad[i-1][j]   : 0.0f;
-                float g2 = (i+1 <  length)   ? grad[i+1][j]   : 0.0f;
+                float g1 = (i-1 >= 0) ? grad[i-1][j] : 0.0f;
+                float g2 = (i+1 <  length) ? grad[i+1][j] : 0.0f;
                 qn = g1; rn = g2;
 
             } else if (dir == 45.0f) {
-                float g1 = (i-1 >= 0 && j+1 < width)     ? grad[i-1][j+1] : 0.0f;
-                float g2 = (i+1 < length && j-1 >= 0)    ? grad[i+1][j-1] : 0.0f;
+                float g1 = (i-1 >= 0 && j+1 < width)  ? grad[i-1][j+1] : 0.0f;
+                float g2 = (i+1 < length && j-1 >= 0) ? grad[i+1][j-1] : 0.0f;
                 qn = g1; rn = g2;
 
             } else { /* 135.0f */
-                float g1 = (i-1 >= 0 && j-1 >= 0)        ? grad[i-1][j-1] : 0.0f;
+                float g1 = (i-1 >= 0 && j-1 >= 0) ? grad[i-1][j-1] : 0.0f;
                 float g2 = (i+1 < length && j+1 < width) ? grad[i+1][j+1] : 0.0f;
                 qn = g1; rn = g2;
             }
