@@ -64,7 +64,7 @@
 		\vspace*{1cm}
 
 		\Huge
-		\textbf{Devoir 1}
+		\textbf{Devoir 2}
 
 		\vspace{0.5cm}
 		\LARGE
@@ -90,8 +90,93 @@
 		Département d'informatique et de recherche opérationnelle\\
 		Université de Montréal\\
 		Canada\\
-		15 octobre 2025
+		29 octobre 2025
 
 	\end{center}
 \end{titlepage}
+\section{Introduction}
+
+Ce travail pratique avait pour but de programmer, en langage C, les principales étapes du détecteur de contours de \textbf{Canny}.  
+L'objectif était de comprendre comment on peut passer d'une image en niveaux de gris à une image contenant seulement les contours importants, tout en réduisant le bruit et les faux contours.
+
+\subsection{But du TP}
+Le but du TP était de réaliser un programme capable de détecter les contours d’une image.  
+Pour y arriver, le programme effectue les étapes suivantes :
+\begin{enumerate}
+    \item Appliquer un \textbf{flou gaussien} pour réduire le bruit;
+    \item Calculer le \textbf{gradient} d’intensité avec les filtres \((-1,1)\);
+    \item Trouver la \textbf{direction du gradient} (0°, 45°, 90°, 135°);
+    \item Faire la \textbf{suppression des non-maximums} pour amincir les contours;
+    \item Appliquer un \textbf{double seuillage} (\(\tau_L\), \(\tau_H\)) avec un suivi par hystérésis pour ne garder que les vrais bords.
+\end{enumerate}
+
+\subsection{Rôle des contours}
+Les contours représentent les zones où l’intensité change brusquement.  
+Ils délimitent les objets et aident à comprendre la structure d’une image.  
+La détection de contours est essentielle pour plusieurs applications : segmentation d’objets, reconnaissance de formes, suivi de mouvement, etc.  
+Un bon détecteur doit être à la fois précis, résistant au bruit et produire des bords fins et continus.
+
+\subsection{Filtre gaussien}
+Avant la détection des contours, un \textbf{filtre gaussien} est appliqué pour adoucir l’image et éliminer le bruit.  
+Cela empêche le détecteur de confondre les petites variations d’intensité avec de faux contours.  
+Dans notre code, ce filtrage est effectué dans le \textbf{domaine fréquentiel} à l’aide de la \textbf{transformée de Fourier (FFT)}.  
+Le paramètre \(\sigma\) contrôle l’intensité du flou :
+\begin{itemize}
+    \item petit \(\sigma\) : plus de détails visibles;
+    \item grand \(\sigma\) : image plus lissée, moins de bruit.
+\end{itemize}
+Cette étape prépare l’image pour le calcul du gradient et assure une détection de contours plus stable.
+
+\section{Description de la méthode utilisée pour calculer le gradient, la norme et l'angle}
+
+Le calcul du gradient permet d’identifier les zones de l’image où l’intensité varie le plus rapidement, ce qui correspond aux contours.  
+Dans notre programme, le gradient est obtenu à l’aide des filtres de convolution \([-1, 1]\), appliqués séparément sur les directions horizontales et verticales.
+
+\subsection*{Calcul du gradient}
+Pour chaque pixel, deux dérivées sont calculées :
+\begin{itemize}
+    \item \( G_x = I(x, y+1) - I(x, y) \) pour la variation horizontale;
+    \item \( G_y = I(x+1, y) - I(x, y) \) pour la variation verticale.
+\end{itemize}
+Ces filtres simples permettent d’estimer la direction et l’intensité du changement local dans l’image.
+
+\subsection*{Norme du gradient}
+La norme du gradient indique l'intensité du contour à chaque point :
+\[
+G = \sqrt{G_x^2 + G_y^2}
+\]
+Plus la norme est grande, plus le contour est fort.  
+C’est cette valeur qui est utilisée plus tard pour la suppression des non-maximums et pour l’hystérésis.
+
+\subsection*{Angle du gradient}
+L’orientation du gradient est donnée par :
+\[
+\theta = \arctan{\left(\frac{G_y}{G_x}\right)}
+\]
+Dans le programme, cet angle est converti en degrés et ramené dans l’intervalle \([0,180]\).  
+Il est ensuite estimé selon quatre directions principales : 0°, 45°, 90° et 135°, ce qui simplifie la comparaison des pixels lors de la suppression des non-maximums.
+
+\section{Dénombrer le nombre de seuils dans le filtre de Canny}
+
+Le filtre de Canny utilise \textbf{deux seuils} : un seuil bas (\(\tau_L\)) et un seuil haut (\(\tau_H\)).  
+Le seuil haut sert à détecter les contours forts, tandis que le seuil bas garde les contours plus faibles s’ils sont reliés à un contour fort.  
+Les pixels sous \(\tau_L\) sont ignorés.  
+Ce double seuillage permet de conserver des bords continus tout en réduisant les faux contours causés par le bruit.
+
+\section{Description de la méthode utilisée pour calculer les seuils à partir de l'histogramme}
+
+\textbf{Sam }
+
+\section{Description de l’approximation de l’angle}
+
+L’angle du gradient est calculé à l’aide de la fonction \(\arctan\left(\frac{G_y}{G_x}\right)\), ce qui donne une valeur comprise entre \(0\) et \(180\) degrés.  
+Pour simplifier le traitement lors de la suppression des non-maximums, on ne garde pas l’angle exact.  
+On retourne plutôt la valeur parmi \(0^\circ\), \(45^\circ\), \(90^\circ\) ou \(135^\circ\) qui est la plus proche de l’angle réel calculé.  
+Cela permet de déterminer plus facilement la direction du contour sans perdre d’information importante.
+
+\section{Description du but de la suppression des non-maximums dans le filtre de Canny}
+\section{Description du but du seuillage pas hystérisis dans le filtre de Canny}
+\section{Présentation des résultats expérimentaux}
+\section{Discussion et conclusion}
+
 \end{document}
