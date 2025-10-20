@@ -6,11 +6,11 @@
 /* langage : C                                          */
 /* labo    : DIRO                                       */
 /*------------------------------------------------------*/
-
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include "FonctionDemo2.h"
 
 /*------------------------------------------------*/
@@ -27,7 +27,16 @@
 int main(int argc, char** argv){
     int i, j;
     int length, width;
-    float sigma = 1.0f;
+    float sigma;
+    float tau_L, tau_H;
+
+    /* ---- Entrées utilisateur ---- */
+    printf("Entrez la valeur de tau_L: ");
+    scanf("%f", &tau_L);
+    printf("Entrez la valeur de tau_H: ");
+    scanf("%f", &tau_H);
+    printf("Entrez l'ecart type du filtre Gaussien: ");
+    scanf("%f", &sigma);
 
     /* Charger l’image */
     float** img = LoadImagePgm(NAME_IMG_IN, &length, &width);
@@ -41,6 +50,7 @@ int main(int argc, char** argv){
     float** img_im = fmatrix_allocate_2d(N, M);
     float** ker_re = fmatrix_allocate_2d(N, M);
     float** ker_im = fmatrix_allocate_2d(N, M);
+
 
 
 
@@ -89,11 +99,11 @@ int main(int argc, char** argv){
 
     for (i = 0; i < length; ++i) {
         for (j = 0; j < width; ++j) {
-            /* (-1,1) avant; pour la dernière col/ligne, on prend arrière */
+            /* (-1,1) avant; pour la dernière col/ligne, arrière */
             float gx = (j + 1 < width)  ? (img_blur[i][j + 1] - img_blur[i][j])
-                                        : (img_blur[i][j]     - img_blur[i][j - 1]);
+                                        : (img_blur[i][j] - img_blur[i][j - 1]);
             float gy = (i + 1 < length) ? (img_blur[i + 1][j] - img_blur[i][j])
-                                        : (img_blur[i][j]     - img_blur[i - 1][j]);
+                                        : (img_blur[i][j] - img_blur[i - 1][j]);
 
             dx[i][j] = gx;
             dy[i][j] = gy;
@@ -137,73 +147,60 @@ int main(int argc, char** argv){
     for (i = 0; i < length; ++i) {
         for (j = 0; j < width; ++j) {
             float g = grad[i][j];
-            float qn = 0.0f, rn = 0.0f; /* voisins à comparer selon la direction */
+            float qn = 0.0f, rn = 0.0f;
             float dir = thetaQ[i][j]; /* 0, 45, 90, 135 */
 
             if (dir == 0.0f) {
-                float g1 = (j-1 >= 0) ? grad[i][j-1] : 0.0f;
-                float g2 = (j+1 <  width) ? grad[i][j+1] : 0.0f;
-                qn = g1; rn = g2;
-
+                qn = (j-1 >= 0) ? grad[i][j-1] : 0.0f;
+                rn = (j+1 <  width) ? grad[i][j+1] : 0.0f;
             } else if (dir == 90.0f) {
-                float g1 = (i-1 >= 0) ? grad[i-1][j] : 0.0f;
-                float g2 = (i+1 <  length) ? grad[i+1][j] : 0.0f;
-                qn = g1; rn = g2;
-
+                qn = (i-1 >= 0) ? grad[i-1][j] : 0.0f;
+                rn = (i+1 <  length) ? grad[i+1][j] : 0.0f;
             } else if (dir == 45.0f) {
-                float g1 = (i-1 >= 0 && j+1 < width)  ? grad[i-1][j+1] : 0.0f;
-                float g2 = (i+1 < length && j-1 >= 0) ? grad[i+1][j-1] : 0.0f;
-                qn = g1; rn = g2;
-
+                qn = (i-1 >= 0 && j+1 < width)  ? grad[i-1][j+1] : 0.0f;
+                rn = (i+1 < length && j-1 >= 0) ? grad[i+1][j-1] : 0.0f;
             } else { /* 135.0f */
-                float g1 = (i-1 >= 0 && j-1 >= 0) ? grad[i-1][j-1] : 0.0f;
-                float g2 = (i+1 < length && j+1 < width) ? grad[i+1][j+1] : 0.0f;
-                qn = g1; rn = g2;
+                qn = (i-1 >= 0 && j-1 >= 0) ? grad[i-1][j-1] : 0.0f;
+                rn = (i+1 < length && j+1 < width) ? grad[i+1][j+1] : 0.0f;
             }
 
-            /* Conserver seulement les maximums le long de la direction */
             supp[i][j] = (g >= qn && g >= rn) ? g : 0.0f;
         }
     }
 
 
 
-    /* ---- Étape 3 : Hystérésis (tau_L=33, tau_H=66) ---- */
-    /*  Normaliser */
+    /* ---- Étape 3 : Hystérésis (tau_L/tau_H saisis) ---- */
+    /* Normaliser */
     float** nms_norm = fmatrix_allocate_2d(length, width);
     for (i = 0; i < length; ++i)
         for (j = 0; j < width; ++j)
-            nms_norm[i][j] = supp[i][j];   /* copie */
-
+            nms_norm[i][j] = supp[i][j];
     Recal(nms_norm, length, width);
     SaveImagePgm(NAME_IMG_SUPPRESSION, nms_norm, length, width);
 
-    /* Seuillage double + suivi par hystérésis (8-voisins) */
-    const float tauL = 33.0f;
-    const float tauH = 66.0f;
-
+    /*  Double seuillage + suivi par hystérésis(8-voisins) */
     float** edges = fmatrix_allocate_2d(length, width);
     for (i = 0; i < length; ++i)
         for (j = 0; j < width; ++j)
-            edges[i][j] = 0.0f;  /* 0 = non-bord, 255 = bord */
+            edges[i][j] = 0.0f;
 
-    /* file des forts pixels */
     int maxq = length * width;
     int *qY = (int*)malloc(sizeof(int)*maxq);
     int *qX = (int*)malloc(sizeof(int)*maxq);
     int head = 0, tail = 0;
 
-    /* Marquer les "forts" (>= tauH) et les mettre en file */
+    /* Marquer les forts (>= tau_H) */
     for (i = 0; i < length; ++i) {
         for (j = 0; j < width; ++j) {
-            if (nms_norm[i][j] >= tauH) {
+            if (nms_norm[i][j] >= tau_H) {
                 edges[i][j] = 255.0f;
                 qY[tail] = i; qX[tail] = j; ++tail;
             }
         }
     }
 
-    /* Propager aux "faibles" (tauL <= v < tauH) connectés aux forts (8-connexité) */
+    /* Propager aux faibles (>= tau_L) connectés aux forts (8-connexité) */
     while (head < tail) {
         int y = qY[head], x = qX[head]; ++head;
         for (int dy8 = -1; dy8 <= 1; ++dy8) {
@@ -212,8 +209,7 @@ int main(int argc, char** argv){
                 int ny = y + dy8, nx = x + dx8;
                 if (ny < 0 || ny >= length || nx < 0 || nx >= width) continue;
 
-                /* pas déjà accepté ET valeur "faible"*/
-                if (edges[ny][nx] == 0.0f && nms_norm[ny][nx] >= tauL) {
+                if (edges[ny][nx] == 0.0f && nms_norm[ny][nx] >= tau_L) {
                     edges[ny][nx] = 255.0f;
                     qY[tail] = ny; qX[tail] = nx; ++tail;
                 }
@@ -221,10 +217,12 @@ int main(int argc, char** argv){
         }
     }
 
-    /*Sauvegarde */
     SaveImagePgm(NAME_IMG_CANNY, edges, length, width);
 
     /* Libérations */
+    free(qY); free(qX);
+    free_fmatrix_2d(edges);
+    free_fmatrix_2d(nms_norm);
     free_fmatrix_2d(img);
     free_fmatrix_2d(img_blur);
     free_fmatrix_2d(img_re);
@@ -237,11 +235,7 @@ int main(int argc, char** argv){
     free_fmatrix_2d(grad_vis);
     free_fmatrix_2d(thetaQ);
     free_fmatrix_2d(supp);
-    free(qY); free(qX);
-    free_fmatrix_2d(edges);
-    free_fmatrix_2d(nms_norm);
 
-    /* Exit */
     printf("\n C'est fini ... \n\n\n");
     return 0;
 }
