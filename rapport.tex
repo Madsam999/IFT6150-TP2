@@ -56,6 +56,9 @@
     inputencoding=utf8,
     extendedchars=true,
 }
+\lstset{style=mystyle,
+    literate={«}{{\guillemotleft}}1{»}{{\guillemotright}}1{’}{{\textquoteright}}1
+}
 \setlength{\parindent}{0in}
 \setlength{\parindent}{0in}
 \begin{document}
@@ -164,8 +167,59 @@ Les pixels sous \(\tau_L\) sont ignorés.
 Ce double seuillage permet de conserver des bords continus tout en réduisant les faux contours causés par le bruit.
 
 \section{Description de la méthode utilisée pour calculer les seuils à partir de l'histogramme}
+La méthode utilisée est une méthode d'histogramme simple. Juste avant la supression des non-maximums, on créé une liste de longueur $length \times width$ qui contient tous
+les gradients de tous les pixels:
+\begin{lstlisting}[language=c]
+    float** gradList = fmatrix_allocate_1d(length * width);
+\end{lstlisting}
+Ensuite, on utilise un algorithme de trie très rudimentaire (et lent) pour trier les valeurs des gradient dans cette liste:
+\begin{lstlisting}[language=C]
+    int totalSize = length * width;
+    float key;
 
-\textbf{Sam }
+    for (int i = 1; i < totalSize; i++) {
+        key = sortedGrads[i]; 
+        j = i - 1;
+
+        while (j >= 0 && sortedGrads[j] > key) {
+            sortedGrads[j + 1] = sortedGrads[j];
+            j = j - 1;
+        }
+        sortedGrads[j + 1] = key; 
+    }
+\end{lstlisting}
+Une fois la liste triée, on utilise la valeur de la variable $p\_H$ pour déterminer la valeur de $\tau_h$ et de $\tau_l$. Pour trouver la valeur de $\tau_h$ 
+choisit le gradient se trouvant au $p\_H$ ième percentile de la liste. Par exemple, si on a que $p\_H = 0.9$, on choisit la valeur du gradient se trouvant à 
+l'index qui se trouve à $90\%$ de la liste.
+\begin{lstlisting}[language=C]
+    int indexToCut = (int)floor((float)(length * width) * p_H);
+    float tau_h = sortedGrads[indexToCut];
+\end{lstlisting}
+Finalement, pour obtenir $\tau_l$, on multiplie $\tau_h$ par $0.5$.
+\begin{lstlisting}[language=C]
+    float tau_l = 0.5 * tau_h;
+\end{lstlisting}
+Une fois les valeurs de $\tau_h$ et $\tau_l$ calculer, on continue l'algorithme comme normale en faisant la supression des non-maximums
+et du seuillage par hystérisis. \\\\
+Avec une valeur de $p_H$ de $0.9$, on obtient $\tau_h = 65.23$ et $\tau_l = 32.62$ (deux valeurs très proche du 66 et 33 utilisé lors de l'ancienne méthode). 
+Avec ces valeurs, on obtient l'image suivante:
+\begin{figure}[H]
+    \center
+    \includegraphics[scale=0.5]{TpIFT6150-2-canny_09.png}
+    \caption{Résultat final avec $\sigma = 1$ et $p_H = 0.9$}
+\end{figure}
+Si on diminue la valeur de $p_H$ à 0.7, on observe que l'algorithme préserve beaucoup plus de contours qu'avant:
+\begin{figure}[H]
+    \center
+    \includegraphics[scale=0.5]{TpIFT6150-2-canny_07.png}
+    \caption{Résultat final avec $\sigma = 1$ et $p_H = 0.7$}
+\end{figure}
+Finalement avec une valeur de $p_H$ de $0.95$, on voit qu'il y a moins de contours de préservés:
+\begin{figure}[H]
+    \center
+    \includegraphics[scale=0.5]{TpIFT6150-2-canny_095.png}
+    \caption{Résultat final avec $\sigma = 1$ et $p_H = 0.95$}
+\end{figure}
 
 \section{Description de l’approximation de l’angle}
 
@@ -175,7 +229,113 @@ On retourne plutôt la valeur parmi \(0^\circ\), \(45^\circ\), \(90^\circ\) ou \
 Cela permet de déterminer plus facilement la direction du contour sans perdre d’information importante.
 
 \section{Description du but de la suppression des non-maximums dans le filtre de Canny}
+Plusieurs gradients vont avoir des normes élevés, mais ce n'est pas tous ces gradient qui vont être pertinent au contour. Comme on le voit dans 
+l'image avant la supression des non-maximus, les contours des formes sont larges et légèrement floues. L'objectif de la méthode
+de supression des non-maximums est donc d'amincir le countour des objets de l'image. Pour exécuter cette méthode, on doit itérer sur tous les gradients de notre
+image et déterminer si ce gradient est un maximum local ou non. Chaque gradient est associé à une direction qui est tangentielle au contour. Par conséquent,
+on compare la force du gradient des deux voisions les plus proches du pixel (dans la direction tangentielle du gradient) et si la norme du gradient du pixel
+en question est plus grande que celle de ses deux voisins, on le conserve (on laisse la couleur du pixel à 255), sinon on le supprime (on met la couleur
+du pixel à 0). Une fois cette opération complétée, on peut faire un seuillage par hystérisis sur l'image pour conserver les gradients qui se trouvent 
+dans une zone spécifique.
 \section{Description du but du seuillage pas hystérisis dans le filtre de Canny}
+Comme on l'a mentionné brièvement dans la section précédente, l'objectif du seuillage par hystérisis est d'éliminer les gradients qui ne se
+retrouvent pas dans une certaines zones. Cette zone est délimiter par les variables $\tau_L$ et $\tau_H$. L'objectif de cette algorithme est relativement 
+similaire à un algorithme de type \textit{flood fill}. Cependant, plutôt que de remplir une zone délimiter par un contour, on rempli les contours selon
+l'intervalle $[\tau_L; \tau_H]$. On a choisit d'implémenter une méthode récursive et itérative. La méthode récursive est assez simple. Elle itère sur tous
+les pixels d'une image noire de même taille que l'image initiale (après la supression des non-maximums) et si le gradient de ce pixel est supérieur à notre borne
+supérieure, on commence la procédure récursive. Cette procédure va ensuite vérifier si ce pixel est un contour (pixel blanc) ou pas (pixel noir) et si
+la norme du gardient du pixel se trouve par-dessus la borne inférieure. Si c'est le cas, on colorie ce pixel en blanc et on obtient l'orientation 
+de ce pixel et on applique la même procédure récursive à ses deux voisins les plus proches.
+\begin{lstlisting}[language=C]
+    void follow(float** sups, int x, int y, float** orient, float** result, int width, int height, float tauL) {
+    // If higher than lower bound and not a contour, then it becomes one
+
+    if(sups[y][x] > tauL && result[y][x] == 0.f) {
+        result[y][x] = 255.f;
+        for(int i = 0; i < 4; i++) {
+            int dir = (int)orient[y][x];
+            switch (dir) {
+            case 0:
+                if(x - 1 >= 0) {
+                    follow(sups, x - 1, y, orient, result, width, height, tauL);
+                }
+                else if(x + 1 < width) {
+                    follow(sups, x + 1, y, orient, result, width, height, tauL);
+                }
+            case 45:
+                if(x + 1 < width && y - 1 >= 0) {
+                    follow(sups, x + 1, y - 1, orient, result, width, height, tauL);
+                }
+                else if(x - 1 >= 0 && y + 1 < height) {
+                    follow(sups, x - 1, y + 1, orient, result, width, height, tauL);
+                }
+            case 90:
+                if(y - 1 >= 0) {
+                    follow(sups, x, y - 1, orient, result, width, height, tauL);
+                }
+                else if(y + 1 < height) {
+                    follow(sups, x, y + 1, orient, result, width, height, tauL);
+                }
+            case 135:
+                if(x - 1 >= 0 && y - 1 >= 0) {
+                    follow(sups, x - 1, y - 1, orient, result, width, height, tauL);
+                }
+                else if(x + 1 < width && y + 1 < height) {
+                    follow(sups, x + 1, y + 1, orient, result, width, height, tauL);
+                }
+            }
+        }
+    }
+}
+
+void recursiveHysteresis(float** result, float** sups, float** orient, int width, int height, float tauL, float tauH) {
+    for(int y = 0; y < height; y++) {
+        for(int x = 0; x < width; x++) {
+            if(sups[y][x] > tauH) {
+                follow(sups, x, y, orient, result, width, height, tauL);
+            }
+        }
+    }
+}
+\end{lstlisting}
+La méthode itérative utilise les principes d'une queue. On commence par touvé les pixels avec une norme de gradient supérieure $\tau_H$. Ensuite, on itère
+sur cette liste en ajoutant les voisins de ce pixel et on colorie les pixels en blanc si leur norme est supérieure à $\tau_L$ et en noir sinon.
+\begin{lstlisting}[language=C]
+float** edges = fmatrix_allocate_2d(length, width);
+for (i = 0; i < length; ++i)
+    for (j = 0; j < width; ++j)
+        edges[i][j] = 0.0f;
+
+int maxq = length * width;
+int *qY = (int*)malloc(sizeof(int)*maxq);
+int *qX = (int*)malloc(sizeof(int)*maxq);
+int head = 0, tail = 0;
+
+for (i = 0; i < length; ++i) {
+    for (j = 0; j < width; ++j) {
+        if (nms_norm[i][j] > tau_H) {
+            edges[i][j] = 255.0f;
+            qY[tail] = i; qX[tail] = j; ++tail;
+        }
+    }
+}
+
+while (head < tail) {
+    int y = qY[head], x = qX[head]; ++head;
+    for (int dy8 = -1; dy8 <= 1; ++dy8) {
+        for (int dx8 = -1; dx8 <= 1; ++dx8) {
+            if (dy8 == 0 && dx8 == 0) continue;
+            int ny = y + dy8, nx = x + dx8;
+            if (ny < 0 || ny >= length || nx < 0 || nx >= width) continue;
+
+            if (edges[ny][nx] == 0.0f && nms_norm[ny][nx] >= tau_L) {
+                edges[ny][nx] = 255.0f;
+                qY[tail] = ny; qX[tail] = nx; ++tail;
+            }
+        }
+    }
+}
+\end{lstlisting}
 \section{Présentation des résultats expérimentaux}
 \section{Discussion et conclusion}
 

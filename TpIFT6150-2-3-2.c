@@ -21,6 +21,16 @@
 #define NAME_IMG_SUPPRESSION "TpIFT6150-2-suppression"
 #define NAME_IMG_CANNY "TpIFT6150-2-canny"
 
+typedef struct {
+    float sum;          // Total sum of gradients in this bin
+    int count;          // Current number of gradients in this bin
+    float* content;     // Dynamically allocated array to store gradients
+    int capacity;       // Current capacity of the 'content' array
+} Bin;
+
+#define NUM_BINS 100 // Use 100 bins as a constant
+#define MAX_BIN_CAPACITY 10 // A reasonable guess for initial capacity
+
 void visualizeImage(float** image, char* imageName, int width, int height) {
     float** imageViz = fmatrix_allocate_2d(height, width);
 
@@ -32,6 +42,7 @@ void visualizeImage(float** image, char* imageName, int width, int height) {
 
     Recal(imageViz, height, width);
     SaveImagePgm(imageName, imageViz, height, width);
+    free_fmatrix_2d(imageViz);
 }
 
 // Recursive method for canny filter
@@ -87,6 +98,24 @@ void recursiveHysteresis(float** result, float** sups, float** orient, int width
     }
 }
 
+void sortList(float* list, int size) {
+    float key;
+    int j;
+
+    for (int i = 1; i < size; i++) {
+        key = list[i]; // Store the current element to be inserted
+        j = i - 1;
+
+        // Move elements of sortedGrads[0..i-1] that are greater than key
+        // to one position ahead of their current position
+        while (j >= 0 && list[j] > key) {
+            list[j + 1] = list[j];
+            j = j - 1;
+        }
+        list[j + 1] = key; // Insert the key into its correct spot
+    }
+}
+
 /*------------------------------------------------*/
 /* PROGRAMME PRINCIPAL   -------------------------*/
 /*------------------------------------------------*/
@@ -94,14 +123,9 @@ int main(int argc, char** argv){
     int i, j;
     int length, width;
     float sigma;
-    float tau_L, tau_H;
     float p_H;
 
     /* ---- Entrées utilisateur ---- */
-    printf("Entrez la valeur de tau_L: ");
-    scanf("%f", &tau_L);
-    printf("Entrez la valeur de tau_H: ");
-    scanf("%f", &tau_H);
     printf("Entrez l'ecart type du filtre Gaussien: ");
     scanf("%f", &sigma);
     printf("Entrez la valeur de p_H: ");
@@ -160,7 +184,7 @@ int main(int argc, char** argv){
             img_blur[i][j] = img_re[i][j];
 
     Recal(img_blur, length, width);
-    visualizeImage(img_blur, "blur", N, M);
+    visualizeImage(img_blur, "blur", length, width);
 
     /* ---- Étape 1.2 : Gradient avec filtres (-1, 1) ---- */
     float** dx   = fmatrix_allocate_2d(length, width);
@@ -181,7 +205,7 @@ int main(int argc, char** argv){
         }
     }
 
-    visualizeImage(grad, NAME_IMG_GRADIENT, N, M);
+    visualizeImage(grad, NAME_IMG_GRADIENT, length, width);
 
     /* ---- Étape 1.3 : Angle (0,45,90,135) à partir de dx,dy ---- */
     float** thetaQ = fmatrix_allocate_2d(length, width);
@@ -200,6 +224,138 @@ int main(int argc, char** argv){
             thetaQ[i][j] = q;
         }
     }
+
+    Recal(grad, length, width);
+
+    float* sortedGrads = fmatrix_allocate_1d(length * width);
+
+    int idx = 0;
+    for(int i = 0; i < length; i++) {
+        for(int j = 0; j < width; j++) {
+            sortedGrads[idx++] = grad[i][j];
+        }
+    }
+    
+    sortList(sortedGrads, length * width);
+
+    // 0. Find the Maximum Gradient (needed to calculate bin width)
+    float g_max = 0.0f;
+    for (i = 0; i < length; ++i) {
+        for (j = 0; j < width; ++j) {
+            if (grad[i][j] > g_max) {
+                g_max = grad[i][j];
+            }
+        }
+    }
+
+    // Safety check for empty or uniform image
+    if (g_max <= 0.0f) {
+        printf("Erreur: Le gradient maximum est zero. Abandon.\n");
+        return 1;
+    }
+
+    float bin_width = g_max / (float)NUM_BINS;
+    
+    // 1. Initialize Histogram Bins (Array of structs)
+    Bin histogram[NUM_BINS];
+    for (i = 0; i < NUM_BINS; ++i) {
+        histogram[i].sum = 0.0f;
+        histogram[i].count = 0;
+        // Allocate initial memory for the content (will be reallocated later)
+        histogram[i].capacity = MAX_BIN_CAPACITY;
+        histogram[i].content = (float*)malloc(sizeof(float) * MAX_BIN_CAPACITY);
+        if (histogram[i].content == NULL) {
+             printf("Erreur d'allocation mémoire pour un bin.\n"); return 1;
+        }
+    }
+
+    // 2. Populate Buckets
+    int bin_index;
+    for (i = 0; i < length; ++i) {
+        for (j = 0; j < width; ++j) {
+            float g = grad[i][j];
+            
+            // Calculate bin index (clamp to last bin if exactly g_max)
+            bin_index = (int)floorf(g / bin_width);
+            if (bin_index >= NUM_BINS) {
+                bin_index = NUM_BINS - 1; 
+            }
+            
+            // Check if capacity needs to be increased (dynamic list)
+            if (histogram[bin_index].count >= histogram[bin_index].capacity) {
+                histogram[bin_index].capacity *= 2;
+                histogram[bin_index].content = (float*)realloc(histogram[bin_index].content, 
+                                                sizeof(float) * histogram[bin_index].capacity);
+                if (histogram[bin_index].content == NULL) {
+                     printf("Erreur de réallocation mémoire pour un bin.\n"); return 1;
+                }
+            }
+
+            // Store gradient, update sum and count
+            histogram[bin_index].content[histogram[bin_index].count] = g;
+            histogram[bin_index].sum += g;
+            histogram[bin_index].count++;
+        }
+    }
+
+    // 3. Find the Percentile Bin and Calculate tau_H
+    int total_pixels = length * width;
+    int target_count = (int)floorf((float)total_pixels * p_H);
+    int cumulative_count = 0;
+    int percentile_bin_index = -1;
+
+    for (i = 0; i < NUM_BINS; ++i) {
+        cumulative_count += histogram[i].count;
+        if (cumulative_count >= target_count) {
+            percentile_bin_index = i;
+            break;
+        }
+    }
+
+    float tau_h_avg = 0.0f;
+    if (percentile_bin_index != -1 && histogram[percentile_bin_index].count > 0) {
+        // Calculate the average of all gradients in the percentile bin
+        tau_h_avg = histogram[percentile_bin_index].sum / (float)histogram[percentile_bin_index].count;
+    } else {
+        // Fallback: Use the max gradient if no data is found (shouldn't happen)
+        tau_h_avg = g_max; 
+    }
+
+    float tau_l_avg = 0.5f * tau_h_avg;
+
+    printf("Max Gradient: %f\n", g_max);
+    printf("Calculated tau_h_avg (ph = %f): %f (from Bin %d)\n", p_H, tau_h_avg, percentile_bin_index);
+    printf("Calculated tau_l_avg: %f\n", tau_l_avg);
+
+    float tau_h_med = 0.0f;
+    float tau_l_med;
+
+    Bin binThreshold = histogram[percentile_bin_index];
+    float* contents = binThreshold.content;
+    int binSize = binThreshold.count;
+
+    sortList(contents, binSize);
+    tau_h_med = contents[binThreshold.count / 2];
+    tau_l_med = 0.5f * tau_h_med;
+
+    printf("Max Gradient: %f\n", g_max);
+    printf("Calculated tau_h_med (ph = %f): %f (from Bin %d)\n", p_H, tau_h_med, percentile_bin_index);
+    printf("Calculated tau_l_med: %f\n", tau_l_med);
+
+    // 4. Free Histogram Memory
+    for (i = 0; i < NUM_BINS; ++i) {
+        free(histogram[i].content);
+    }
+
+    int indexToCut = (int)floor((float)(length * width) * p_H);
+
+    if(indexToCut >= length * width) indexToCut = (length * width) - 1;
+
+    float tau_h = sortedGrads[indexToCut];
+    printf("Max: %f\n", sortedGrads[(length * width) - 1]);
+    printf("Calculated tau_h (ph = %f): %f\n", p_H, tau_h);
+    float tau_l = 0.5 * tau_h;
+    printf("Calculated tau_l (ph = %f): %f\n", p_H, tau_l);
 
     /* ---- Étape 2 : Suppression des non-maximums ---- */
     float** supp = fmatrix_allocate_2d(length, width);
@@ -238,7 +394,16 @@ int main(int argc, char** argv){
 
     visualizeImage(nms_norm, NAME_IMG_SUPPRESSION, N, M);
 
-    /*  Double seuillage + suivi par hystérésis(8-voisins) */
+
+    float** imageCanny = fmatrix_allocate_2d(length, width);
+    for(int i = 0; i < length; i++) {
+        for(int j = 0; j < width; j++) {
+            imageCanny[i][j] = 0.f;
+        }
+    }
+
+    /*
+    
     float** edges = fmatrix_allocate_2d(length, width);
     for (i = 0; i < length; ++i)
         for (j = 0; j < width; ++j)
@@ -249,17 +414,18 @@ int main(int argc, char** argv){
     int *qX = (int*)malloc(sizeof(int)*maxq);
     int head = 0, tail = 0;
 
-    /* Marquer les forts (>= tau_H) */
+    
     for (i = 0; i < length; ++i) {
         for (j = 0; j < width; ++j) {
-            if (nms_norm[i][j] > tau_H) {
+            if (nms_norm[i][j] > tau_h) {
                 edges[i][j] = 255.0f;
                 qY[tail] = i; qX[tail] = j; ++tail;
             }
         }
     }
+    
 
-    /* Propager aux faibles (>= tau_L) connectés aux forts (8-connexité) */
+    
     while (head < tail) {
         int y = qY[head], x = qX[head]; ++head;
         for (int dy8 = -1; dy8 <= 1; ++dy8) {
@@ -268,31 +434,20 @@ int main(int argc, char** argv){
                 int ny = y + dy8, nx = x + dx8;
                 if (ny < 0 || ny >= length || nx < 0 || nx >= width) continue;
 
-                if (edges[ny][nx] == 0.0f && nms_norm[ny][nx] >= tau_L) {
+                if (edges[ny][nx] == 0.0f && nms_norm[ny][nx] >= tau_l) {
                     edges[ny][nx] = 255.0f;
                     qY[tail] = ny; qX[tail] = nx; ++tail;
                 }
             }
         }
     }
+    */
 
-    SaveImagePgm(NAME_IMG_CANNY, edges, length, width);
+    recursiveHysteresis(imageCanny, supp, thetaQ, width, length, tau_l, tau_h);
 
-    float** canny_empt = fmatrix_allocate_2d(length, width);
-    for(int i = 0; i < length; i++) {
-        for(int j = 0; j < width; j++) {
-            canny_empt[i][j] = 0.f;
-        }
-    }
-
-    recursiveHysteresis(canny_empt, nms_norm, thetaQ, width, length, tau_L, tau_H);
-
-    visualizeImage(canny_empt, "test", width, length);
+    SaveImagePgm(NAME_IMG_CANNY, imageCanny, length, width);
 
     /* Libérations */
-    free(qY); free(qX);
-    free_fmatrix_2d(edges);
-    free_fmatrix_2d(nms_norm);
     free_fmatrix_2d(img);
     free_fmatrix_2d(img_blur);
     free_fmatrix_2d(img_re);
@@ -303,8 +458,9 @@ int main(int argc, char** argv){
     free_fmatrix_2d(dy);
     free_fmatrix_2d(grad);
     free_fmatrix_2d(thetaQ);
+    free_fmatrix_2d(nms_norm);
     free_fmatrix_2d(supp);
-    free_fmatrix_2d(canny_empt);
+    free_fmatrix_2d(imageCanny);
 
     printf("\n C'est fini ... \n\n\n");
     return 0;
