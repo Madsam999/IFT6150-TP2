@@ -16,7 +16,7 @@
 /*------------------------------------------------*/
 /* DEFINITIONS -----------------------------------*/
 /*------------------------------------------------*/
-#define NAME_IMG_IN "photograph"
+#define NAME_IMG_IN "mona"
 #define NAME_IMG_GAUSS "TpIFT6150-2-filtre-gaussien"
 #define NAME_IMG_GRADIENT "TpIFT6150-2-gradient"
 #define NAME_IMG_SUPPRESSION "TpIFT6150-2-suppression"
@@ -115,6 +115,7 @@ void follow(float** sups, int x, int y, int** orient, float** result, int width,
                 else if(x + 1 < width) {
                     follow(sups, x + 1, y, orient, result, width, height, tauL);
                 }
+                break;
             case 45:
                 if(x + 1 < width && y - 1 >= 0) {
                     follow(sups, x + 1, y - 1, orient, result, width, height, tauL);
@@ -122,6 +123,7 @@ void follow(float** sups, int x, int y, int** orient, float** result, int width,
                 else if(x - 1 >= 0 && y + 1 < height) {
                     follow(sups, x - 1, y + 1, orient, result, width, height, tauL);
                 }
+                break;
             case 90:
                 if(y - 1 >= 0) {
                     follow(sups, x, y - 1, orient, result, width, height, tauL);
@@ -129,6 +131,7 @@ void follow(float** sups, int x, int y, int** orient, float** result, int width,
                 else if(y + 1 < height) {
                     follow(sups, x, y + 1, orient, result, width, height, tauL);
                 }
+                break;
             case 135:
                 if(x - 1 >= 0 && y - 1 >= 0) {
                     follow(sups, x - 1, y - 1, orient, result, width, height, tauL);
@@ -136,6 +139,7 @@ void follow(float** sups, int x, int y, int** orient, float** result, int width,
                 else if(x + 1 < width && y + 1 < height) {
                     follow(sups, x + 1, y + 1, orient, result, width, height, tauL);
                 }
+                break;
             }
         }
     }
@@ -281,15 +285,19 @@ void nonMaxSuppression(float** nmSupps, int** directions, float** norms, int wid
             case 0:
                 qn = (j-1 >= 0) ? norms[i][j-1] : 0.0f;
                 rn = (j+1 <  width) ? norms[i][j+1] : 0.0f;
+                break;
             case 45:
                 qn = (i-1 >= 0) ? norms[i-1][j] : 0.0f;
                 rn = (i+1 <  height) ? norms[i+1][j] : 0.0f;
+                break;
             case 90:
                 qn = (i-1 >= 0 && j+1 < width)  ? norms[i-1][j+1] : 0.0f;
                 rn = (i+1 < height && j-1 >= 0) ? norms[i+1][j-1] : 0.0f;
+                break;
             case 135:
                 qn = (i-1 >= 0 && j-1 >= 0) ? norms[i-1][j-1] : 0.0f;
                 rn = (i+1 < height && j+1 < width) ? norms[i+1][j+1] : 0.0f;
+                break;
             }
 
             nmSupps[i][j] = (norm > qn && norm > rn) ? norm : 0.f;
@@ -722,7 +730,9 @@ int main(int argc, char** argv) {
     {
     case 0:
         doNormalCanny();    
+        break;
     case 1:
         doHistogramCanny();
+        break;
     }
 }
