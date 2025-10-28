@@ -16,7 +16,7 @@
 /*------------------------------------------------*/
 /* DEFINITIONS -----------------------------------*/
 /*------------------------------------------------*/
-#define NAME_IMG_IN "mona"
+#define NAME_IMG_IN "photograph"
 #define NAME_IMG_GAUSS "TpIFT6150-2-filtre-gaussien"
 #define NAME_IMG_GRADIENT "TpIFT6150-2-gradient"
 #define NAME_IMG_SUPPRESSION "TpIFT6150-2-suppression"
