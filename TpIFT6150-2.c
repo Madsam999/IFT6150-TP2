@@ -21,6 +21,7 @@
 #define NAME_IMG_GRADIENT "TpIFT6150-2-gradient"
 #define NAME_IMG_SUPPRESSION "TpIFT6150-2-suppression"
 #define NAME_IMG_CANNY "TpIFT6150-2-canny"
+#define NAME_IMG_CANNY_SEMI_AUTO "TpIFT6150-2-cannySemiAuto"
 
 /*
 Utilities structures
@@ -372,7 +373,7 @@ void histNoBin(float** norms, int** directions, int width, int height, float pH)
         recursiveHysteresis(result, nmSupps, directions, width, height, tauL, tauH);
         break;
     }
-    visualizeImage(result, NAME_IMG_CANNY, width, height);
+    visualizeImage(result, NAME_IMG_CANNY_SEMI_AUTO, width, height);
 
     free_fmatrix_1d(sortedGrads);
 
@@ -531,7 +532,7 @@ void histBin(float** norms, int** directions, int width, int height, float pH) {
         recursiveHysteresis(result, nmSupps, directions, width, height, tauL, tauH);
         break;
     }
-    visualizeImage(result, NAME_IMG_CANNY, width, height);
+    visualizeImage(result, NAME_IMG_CANNY_SEMI_AUTO, width, height);
 
     free_fmatrix_1d(sortedGrads);
 
